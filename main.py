@@ -16,6 +16,7 @@ Config.set('kivy', 'log_level', 'debug')
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.uix.video import Video
+from kivy.uix.slider import Slider
 from kivy.core.audio import SoundLoader
 from kivy.properties import NumericProperty, ReferenceListProperty, ObjectProperty, StringProperty, ListProperty
 from kivy.vector import Vector
@@ -25,18 +26,44 @@ import datetime
 import os.path
 
 
+class RichSlider(Slider):
+    def __init__(self, **kwargs):
+        self.register_event_type('on_release')
+        super(RichSlider, self).__init__(**kwargs)
+
+    def on_release(self):
+        pass
+
+    def on_touch_up(self, touch):
+        super(RichSlider, self).on_touch_up(touch)
+        if touch.grab_current == self:
+            self.dispatch('on_release')
+            return True
+
+
 class Previewer(Video):
 
     nav_sliders = ObjectProperty(None)
 
-    def on_load(self):
-        self.nav_sliders.duration = self.duration    
+    def __init__(self, **kwargs):
+        super(Previewer, self).__init__(**kwargs)
 
-        def play(dt): 
+    def on_duration(self, old, new):
+        if new == 1.0:
+            self.seek(0)
+            self.volume = 0
             self.state = 'play'
-            self.eos = 'pause'
+            return
         
-        Clock.schedule_once(play, 0.1)
+        print 'dope load {0}'.format(new)
+        self.nav_sliders.duration = new
+
+    def on_position(self, old, new):
+        distance_from_end_seek = abs(new - self.nav_sliders.slider_b.value)        
+        
+        # loop if we reached slider b
+        if new > 1 and distance_from_end_seek < 0.1 and self.state == 'play':
+            self.seek(self.nav_sliders.slider_a.value / self.duration)
 
 
 class NavSliders(Widget):
@@ -47,27 +74,100 @@ class NavSliders(Widget):
     slider_a = ObjectProperty(None)
     slider_b = ObjectProperty(None)
     player = ObjectProperty(None)
+    
+
+    # def __init__(self, **kwargs):
+    #     super(NavSliders, self).__init__(**kwargs)
+        
 
     def on_duration(self, old, new):
-        self.slider_a.disabled = False
-        self.slider_b.disabled = False
+
+        # enable sliders if not active yet
+        if self.slider_a.disabled:
+            self.slider_a.disabled = False
+            self.slider_b.disabled = False
+
+            self.slider_a.bind(on_touch_down=self.suppress,
+                               on_release=self.resume,
+                               value=self.on_seek)
+
+            self.slider_b.bind(on_touch_down=self.suppress,
+                               on_release=self.loopback_and_resume,
+                               value=self.on_seek)
+
+        # set new ranges and potential play values according to movie duration
         self.slider_a.range = 0, new
-        self.slider_a.value = min(new, max(0, new - 20))
         self.slider_b.range = 0, new
-        self.slider_b.value = min(self.slider_a.value + 12, new)
+
+        a_value = min(new, max(0, new - 20))
+
+        self.slider_b.value = min(a_value + 12, new)         
+        self.slider_a.value = a_value
+        
+        # play from that point in the video
+        self.player.seek(self.slider_a.value / float(new))
+        self.player.state = 'play'
+        self.player.volume = 1
+
+    def suppress(self, slider, touch):
+        if slider.collide_point(*touch.pos):
+            self.player.state = 'pause'
+
+    def resume(self, slider):
+        self.player.state = 'play'
+
+        return True
+
+    def loopback_and_resume(self, slider):
+        self.player.seek(self.slider_a.value / self.duration)
+
+        return self.resume(slider)
+
+    def on_seek(self, slider, value):       
+        if slider == self.slider_a:
+            if slider.value + 5 > self.slider_b.max:
+                print 'resist the end'
+                slider.value = self.slider_b.max - 5
+
+            elif slider.value + 5 > self.slider_b.value:
+                print 'push b forwards'
+                self.slider_b.value = min(slider.value + 5, self.slider_b.max)
+            
+            
+
+            else:
+                self.player.seek(slider.value / self.duration)
+
+
+        elif slider == self.slider_b:
+            if slider.value < 5:
+                print 'resist the beginning'
+                slider.value = 5
+
+
+            elif slider.value - 5 < self.slider_a.value:
+                print 'push a backwards'
+                self.slider_a.value = max(slider.value - 5, 0)
+
+            
+            else:
+                self.player.seek(slider.value / self.duration)
+
         start_td = datetime.timedelta(seconds=self.slider_a.value)
         self.label_a.text = str(start_td)[:10]
-        end_td = datetime.timedelta(seconds=self.slider_b.value)
-        self.label_b.text = str(end_td)[:10]            
-        self.player.seek(self.slider_a.value / new)
 
+        end_td = datetime.timedelta(seconds=self.slider_b.value)
+        self.label_b.text = str(end_td)[:10]   
+
+        
 
 class SourceFile(Widget):
 
-    filename = StringProperty('')
-    filesize = NumericProperty(0)
-    datetime = StringProperty('')
-    duration = StringProperty('')
+    filename = StringProperty()
+    filesize = NumericProperty()
+    datetime = StringProperty()
+    duration = StringProperty()
+    filepath = StringProperty()
 
     file_list = ObjectProperty(None)
     video_editor = ObjectProperty(None)
@@ -77,13 +177,9 @@ class SourceFile(Widget):
         self.file_list = shadowtrim.file_list
         self.video_editor = shadowtrim.video_editor
 
-        self._shadowtrim = shadowtrim
-
-    def on_touch_up(self, touch):
-        if 'button' in touch.profile and touch.button == 'left':
-            if touch.x > self.x and touch.x < self.right and touch.y > self.y and touch.y < self.top:
-                self.video_editor.filename = os.path.join(self._shadowtrim.source_dir, self.filename)
-                self.video_editor.file = self
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos) and touch.button == 'left' and touch.is_double_tap:
+            self.video_editor.file = self
 
 
 class FileList(Widget):
@@ -112,6 +208,7 @@ class FileList(Widget):
                     'ctime': ctime,
                 })
 
+            # temp limit to work faster
             if len(files) > 30:
                 break
 
@@ -123,7 +220,8 @@ class FileList(Widget):
                 filename=file['name'],
                 filesize=file['size'],
                 datetime=file['ctime'].strftime('%Y %B %d %H:%M:%S'),
-                duration='null'
+                duration='null',
+                filepath=os.path.join(source_dir, file['name'])
             )
             
             self.grid.add_widget(source_file)
@@ -133,24 +231,25 @@ class FileList(Widget):
 
 
 class VideoEditor(Widget):
-    
-    filename = StringProperty('nothing selected')
+
     file = ObjectProperty(None)
     nav_sliders = ObjectProperty(None)
     player = ObjectProperty(None)
 
-    def on_file(self, old, new):        
+    def on_file(self, old, new):
+        if self.player.disabled:
+            self.player.disabled = False
+        
+        self.player.state = 'stop'
         self.player.unload()
-        self.player.source = self.filename
-
-        Clock.schedule_once(lambda dt: self.player.on_load(), 0.45)
-
+        self.player.source = new.filepath
 
 class JobStatuses(Widget):
     pass
 
 
 class ShadowTrim(Widget):
+
     file_list = ObjectProperty(None)
     video_editor = ObjectProperty(None)
 

@@ -19,14 +19,20 @@
             size: self.size
             size_hint_x: 0.84
             orientation: 'vertical'
-            Slider:
+            RichSlider:
+                pos: self.pos
                 size_hint_y: 0.5
                 id: slider_a
+                name: 'A'
                 disabled: True
-            Slider:
+                sensitivity: 'handle'
+            RichSlider:
+                pos: self.pos
                 size_hint_y: 0.5
                 id: slider_b
+                name: 'B'
                 disabled: True
+                sensitivity: 'handle'
         Label:
             size_hint_x: 0.08
             id: label_b
@@ -134,31 +140,25 @@
             size_hint_y: None
 
 <VideoEditor>:
-    player: player
     nav_sliders: nav_sliders
+    player: player
     
     BoxLayout:
+        id: box
         pos: root.pos
         size: root.size
-        canvas:
-            Color:
-                rgba: 0, 1, 0, 0.7
-            Rectangle:
-                pos: root.pos
-                size: root.size
         orientation: 'vertical'
         spacing: 5
         padding: 5, 5, 5, 5
         Previewer:
             id: player
             nav_sliders: nav_sliders
-            state: 'play'
-            ssize_hint_y: 0.8
+            size_hint_y: 0.8
+            disabled: True
         NavSliders:
             id: nav_sliders
             player: player
             size_hint_y: 0.1
-
         Label:
             size_hint_y: 0.1
             font_size: 20
