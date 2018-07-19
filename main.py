@@ -16,6 +16,7 @@ Config.set('kivy', 'log_level', 'debug')
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.uix.video import Video
+from kivy.logger import Logger
 from kivy.uix.slider import Slider
 from kivy.core.audio import SoundLoader
 from kivy.properties import NumericProperty, ReferenceListProperty, ObjectProperty, StringProperty, ListProperty
@@ -24,9 +25,13 @@ from kivy.clock import Clock
 
 import datetime
 import os.path
+import re
+import subprocess
+import shlex
 
 
 class RichSlider(Slider):
+
     def __init__(self, **kwargs):
         self.register_event_type('on_release')
         super(RichSlider, self).__init__(**kwargs)
@@ -44,9 +49,7 @@ class RichSlider(Slider):
 class Previewer(Video):
 
     nav_sliders = ObjectProperty(None)
-
-    def __init__(self, **kwargs):
-        super(Previewer, self).__init__(**kwargs)
+    video_editor = ObjectProperty(None)
 
     def on_duration(self, old, new):
         if new == 1.0:
@@ -55,11 +58,17 @@ class Previewer(Video):
             self.state = 'play'
             return
         
-        print 'dope load {0}'.format(new)
         self.nav_sliders.duration = new
 
     def on_position(self, old, new):
-        distance_from_end_seek = abs(new - self.nav_sliders.slider_b.value)        
+        distance_from_end_seek = abs(new - self.nav_sliders.slider_b.value)
+
+        timedelta = datetime.timedelta(seconds=new)
+        text = str(timedelta)[:10]
+        if len(text) == 7:
+            text += '.00'
+
+        self.video_editor.position_label.text = text
         
         # loop if we reached slider b
         if new > 1 and distance_from_end_seek < 0.1 and self.state == 'play':
@@ -74,11 +83,7 @@ class NavSliders(Widget):
     slider_a = ObjectProperty(None)
     slider_b = ObjectProperty(None)
     player = ObjectProperty(None)
-    
-
-    # def __init__(self, **kwargs):
-    #     super(NavSliders, self).__init__(**kwargs)
-        
+    video_editor = ObjectProperty(None)
 
     def on_duration(self, old, new):
 
@@ -126,30 +131,28 @@ class NavSliders(Widget):
     def on_seek(self, slider, value):       
         if slider == self.slider_a:
             if slider.value + 5 > self.slider_b.max:
-                print 'resist the end'
                 slider.value = self.slider_b.max - 5
 
             elif slider.value + 5 > self.slider_b.value:
-                print 'push b forwards'
                 self.slider_b.value = min(slider.value + 5, self.slider_b.max)
-            
-            
 
+            elif self.slider_b.value - slider.value > 20:
+                self.slider_b.value = slider.value + 20
+            
             else:
                 self.player.seek(slider.value / self.duration)
 
 
         elif slider == self.slider_b:
             if slider.value < 5:
-                print 'resist the beginning'
                 slider.value = 5
 
-
             elif slider.value - 5 < self.slider_a.value:
-                print 'push a backwards'
                 self.slider_a.value = max(slider.value - 5, 0)
 
-            
+            elif slider.value - self.slider_a.value > 20:
+                self.slider_a.value = slider.value - 20
+
             else:
                 self.player.seek(slider.value / self.duration)
 
@@ -157,9 +160,15 @@ class NavSliders(Widget):
         self.label_a.text = str(start_td)[:10]
 
         end_td = datetime.timedelta(seconds=self.slider_b.value)
-        self.label_b.text = str(end_td)[:10]   
+        self.label_b.text = str(end_td)[:10]
 
+        duration_td = datetime.timedelta(seconds=self.slider_b.value - self.slider_a.value)
+        text = str(duration_td)[:10]
+        if len(text) == 7:
+            text += '.00'
         
+        self.video_editor.duration_label.text = text
+
 
 class SourceFile(Widget):
 
@@ -169,6 +178,12 @@ class SourceFile(Widget):
     duration = StringProperty()
     filepath = StringProperty()
 
+    mark_color_r = NumericProperty(0)
+    mark_color_g = NumericProperty(0)
+    mark_color_b = NumericProperty(0)
+    mark_color_a = NumericProperty(0)
+    mark_color = ReferenceListProperty(mark_color_r, mark_color_g, mark_color_b, mark_color_a)
+
     file_list = ObjectProperty(None)
     video_editor = ObjectProperty(None)
 
@@ -177,8 +192,15 @@ class SourceFile(Widget):
         self.file_list = shadowtrim.file_list
         self.video_editor = shadowtrim.video_editor
 
+    def mark_done(self):
+        self.mark_color = 0.545, 0.909, 0.407, 0.85
+
+    def mark_error(self):
+        self.mark_color = 0.917, 0.262, 0.262, 0.85
+
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos) and touch.button == 'left' and touch.is_double_tap:
+            self.file_list.select(self)
             self.video_editor.file = self
 
 
@@ -186,6 +208,18 @@ class FileList(Widget):
 
     grid = ObjectProperty(None)
     source_files = ListProperty(None)
+
+    def select(self, source_file):
+        wip_mark_color = 0.980, 0.678, 0.180, 0.85
+        unselected_mark_color = 0, 0, 0, 0
+        
+        for file in self.source_files:
+            if source_file.filepath == file.filepath and tuple(file.mark_color) == unselected_mark_color:
+                source_file.mark_color = wip_mark_color
+
+            elif tuple(file.mark_color) == wip_mark_color:
+                file.mark_color = unselected_mark_color
+
 
     def create_source_files(self, shadowtrim):
         source_dir = os.getenv('SHADOWTRIM_SOURCE_DIR', r'D:\ShadowPlay\Rocket League')
@@ -208,11 +242,11 @@ class FileList(Widget):
                     'ctime': ctime,
                 })
 
-            # temp limit to work faster
-            if len(files) > 30:
-                break
+            # # temp limit to work faster
+            # if len(files) > 30:
+            #     break
 
-        files.sort(key=lambda f: f['ctime'], reverse=True)
+        files.sort(key=lambda f: f['ctime'])
 
         for file in files:
             source_file = SourceFile(
@@ -235,14 +269,98 @@ class VideoEditor(Widget):
     file = ObjectProperty(None)
     nav_sliders = ObjectProperty(None)
     player = ObjectProperty(None)
+    filename_input = ObjectProperty(None)
+    save_button = ObjectProperty(None)
+    duration_label = ObjectProperty(None)
+    position_label = ObjectProperty(None)
+
+    def validate_filename(self):
+        self.player.state = 'pause'
+        
+        if not self._legal_filename(self.filename_input.text):
+            self.filename_input.background_color = 0.8, 0, 0, 0.7
+            self.filename_input.foreground_color = 0.7, 0.7, 0.7, 1
+
+        else:
+            self.filename_input.background_color = 1, 1, 1, 1
+            self.filename_input.foreground_color = 0.3, 0.3, 0.3, 1
+
+    def save_file(self):
+        output_dir = os.getenv('SHADOWTRIM_OUTPUT_DIR', r'D:\ShadowPlay\Rocket League\trimmed')
+        filename = self.filename_input.text
+        if filename == '' or not self._legal_filename(filename):
+            Logger.warning('Application: Illegal or empty filename')
+            return
+
+        original_filename = filename.rstrip('.mp4')
+        filepath = os.path.join(output_dir, original_filename + '.mp4')
+        starting_number = 2
+        
+        while os.path.exists(filepath):
+            filepath = os.path.join(output_dir, original_filename + ' {0}.mp4'.format(starting_number))
+            starting_number += 1
+
+        start_time = self.nav_sliders.slider_a.value
+        end_time = self.nav_sliders.slider_b.value
+        
+        Logger.info('Application: Saving file {0}'.format(filepath))
+        Logger.debug('Application: Start position @ {0}'.format(self.nav_sliders.label_a.text))
+        Logger.debug('Application: End position @ {0}'.format(self.nav_sliders.label_b.text))
+
+        ffmpeg_command = 'ffmpeg -i "{source_file}" -vcodec copy -acodec copy -ss {start_position_seconds:.3f} -t {clip_duration:.3f} "{output_file}"'
+        ffmpeg_command = ffmpeg_command.format(
+            source_file=self.file.filepath,
+            start_position_seconds=self.nav_sliders.slider_a.value,
+            clip_duration=self.nav_sliders.slider_b.value - self.nav_sliders.slider_a.value,
+            output_file=filepath
+        )
+
+        Logger.debug('Application: ffmpeg command: {0}'.format(ffmpeg_command))
+
+        if self._run_command(ffmpeg_command):
+            self.filename_input.text = ''
+            self.file.mark_done()
+            Logger.info('Application: Saved successfully!')
+        else:
+            self.file.mark_error()
+            Logger.warning('Application: Error saving file!')
 
     def on_file(self, old, new):
         if self.player.disabled:
             self.player.disabled = False
+            self.filename_input.disabled = False
         
+        self.filename_input.text = ''
         self.player.state = 'stop'
         self.player.unload()
         self.player.source = new.filepath
+
+    def _legal_filename(self, filename):
+        return bool(re.match(r'^[a-zA-z0-9_\-()., ]*$', filename) and not filename.endswith('.'))
+
+    def _run_command(self, command):
+        popen = subprocess.Popen(['cmd.exe', '/c'] + shlex.split(command),
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 cwd=os.getcwd(),
+                                 env=os.environ)
+
+        out, err = popen.communicate()
+        code = popen.returncode
+
+        if code != 0:
+            Logger.warning('Application: Error running command: {0}'.format(command))
+            Logger.warning('Application: Exit code: {0}'.format(code))
+            Logger.warning('Application: Stdout: {0}'.format(out))
+            Logger.warning('Application: Stderr: {0}'.format(err))
+            
+            return False
+
+        Logger.debug('Application: Command executed successfully')
+        Logger.trace('Application: Stdout: {0}'.format(out))
+        
+        return True
+
 
 class JobStatuses(Widget):
     pass

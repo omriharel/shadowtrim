@@ -11,47 +11,53 @@
         size: root.size
         orientation: 'horizontal'
         Label:
-            size_hint_x: 0.08
+            size_hint_x: 0.1
             id: label_a
-            text: 'null'
+            font_size: 18
+            font_name: 'Consola'
+            color: 0.180, 0.980, 0.431, 1
         BoxLayout:
             pos: self.pos
             size: self.size
-            size_hint_x: 0.84
+            size_hint_x: 0.8
             orientation: 'vertical'
             RichSlider:
                 pos: self.pos
                 size_hint_y: 0.5
                 id: slider_a
-                name: 'A'
                 disabled: True
-                sensitivity: 'handle'
             RichSlider:
                 pos: self.pos
                 size_hint_y: 0.5
                 id: slider_b
-                name: 'B'
                 disabled: True
-                sensitivity: 'handle'
         Label:
-            size_hint_x: 0.08
+            size_hint_x: 0.1
             id: label_b
-            text: 'null'
+            font_size: 18
+            font_name: 'Consola'
+            color: 0.980, 0.231, 0.180, 1
 
 <SourceFile>:
     BoxLayout:
         canvas.before:
             Color:
-
                 rgba: 0.15, 0.15, 0.1, 1
             Rectangle:
                 pos: self.pos
                 size: self.size
+            Color:
+                rgba: root.mark_color
+            Line:
+                rectangle: self.x, self.y, self.width, self.height
+                close: True
+                joint: 'round'
+                width: 2
 
         pos: root.pos
         size: root.size
         orientation: 'horizontal'
-        padding: 8, 3, 3, 3
+        padding: 8, 3, 8, 3
         BoxLayout:
             orientation: 'vertical'
             Label:
@@ -132,7 +138,7 @@
         GridLayout:
             id: grid
             cols: 1
-            padding: 5, 5, 0, 0
+            padding: 5, 5, 5, 5
             spacing: 5, 5
             row_default_height: 55
             row_force_default: True
@@ -142,6 +148,10 @@
 <VideoEditor>:
     nav_sliders: nav_sliders
     player: player
+    filename_input: filename_input
+    save_button: save_button
+    duration_label: duration_label
+    position_label: position_label
     
     BoxLayout:
         id: box
@@ -149,34 +159,101 @@
         size: root.size
         orientation: 'vertical'
         spacing: 5
-        padding: 5, 5, 5, 5
+        padding: 0, 5, 5, 5
         Previewer:
             id: player
             nav_sliders: nav_sliders
-            size_hint_y: 0.8
+            video_editor: root
             disabled: True
         NavSliders:
             id: nav_sliders
             player: player
+            video_editor: root
             size_hint_y: 0.1
-        Label:
+        BoxLayout:
             size_hint_y: 0.1
-            font_size: 20
-            text: root.file.datetime if root.file is not None else 'null'
+            orientation: 'horizontal'
+            spacing: 5
+            BoxLayout:
+                size_hint_x: 0.3
+                orientation: 'vertical'
+                padding: 50, 0, 0, 0
+                Label:
+                    size_hint_y: 0.25
+                    font_size: 14
+                    color: 0.2, 0.415, 1, 0.9
+                    text_size: self.size
+                    halign: 'left'
+                    text: 'Position'
+                Label:
+                    size_hint_y: 0.75
+                    id: position_label
+                    font_name: 'Consola'
+                    font_size: 45
+                    color: 0.2, 0.415, 1, 1
+                    text_size: self.size
+                    halign: 'left'
+                    text: '0:00:00.00'
+            BoxLayout:
+                size_hint_x: 0.3
+                orientation: 'vertical'
+                padding: 2, 2, 2, 2
+                spacing: 5
+                Label:
+                    size_hint_y: 0.3
+                    text_size: self.size
+                    halign: 'left'
+                    font_size: 15 
+                    text: 'Name the clip:'
+                TextInput:
+                    size_hint_y: 0.6
+                    disabled: True
+                    id: filename_input
+                    font_size: 18
+                    hint_text: 'Be creative..'
+                    multiline: False
+                    cursor_color: 0.5, 0.5, 0.5, 1
+                    selection_color: 0.7, 0.7, 0.7, 0.3
+                    on_text_validate: root.save_file()
+                    on_text: root.validate_filename()
+                Widget:
+                    size_hint_y: 0.1
+            AnchorLayout:
+                size_hint_x: 0.1
+                Button:
+                    size_hint: 0.8, 0.7
+                    disabled: root.filename_input.text == ''
+                    id: save_button
+                    on_press: root.save_file()
+                    font_size: 20
+                    text: 'Save it!'
+            BoxLayout:
+                size_hint_x: 0.3
+                orientation: 'vertical'
+                padding: 50, 0, 0, 0
+                Label:
+                    size_hint_y: 0.25
+                    font_size: 14
+                    color: 1, 0.682, 0.2, 0.9
+                    text_size: self.size
+                    halign: 'left'
+                    text: 'Clip duration'
+                Label:
+                    size_hint_y: 0.75
+                    id: duration_label
+                    font_name: 'Consola'
+                    font_size: 45
+                    color: 1, 0.682, 0.2, 1
+                    text_size: self.size
+                    halign: 'left'
+                    text: '0:00:00.00'
 
 <JobStatuses>:
-    canvas:
-        Color:
-            rgba: 0, 0, 1, 0.7
-        Rectangle:
-            pos: root.pos
-            size: root.size
-
     Label:
         center_x: root.center_x
         center_y: root.center_y
         font_size: 20
-        text: 'jobs'
+        text: 'settings will be here at some point. today is not that day'
 
 <ShadowTrim>:
     file_list: file_list
