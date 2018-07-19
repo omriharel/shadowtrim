@@ -214,7 +214,7 @@ class FileList(Widget):
         unselected_mark_color = 0, 0, 0, 0
         
         for file in self.source_files:
-            if source_file.filepath == file.filepath and tuple(file.mark_color) == unselected_mark_color:
+            if source_file.filepath == file.filepath and tuple(file.mark_color) in [unselected_mark_color, wip_mark_color]:
                 source_file.mark_color = wip_mark_color
 
             elif tuple(file.mark_color) == wip_mark_color:
