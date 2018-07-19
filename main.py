@@ -387,26 +387,3 @@ class ShadowTrimApp(App):
 
 if __name__ == '__main__':
     ShadowTrimApp().run()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# import os.path
-# # ffmpeg -i "D:\ShadowPlay\Rocket League\Rocket League 2018.07.15 - 20.25.33.135737.DVR.mp4" -vcodec copy -acodec copy -ss 55 -t 10 output.mp4
-
-# source_dir = r'D:\ShadowPlay\Rocket League'
-# dest_dir = r'D:\Projects\shadowtrim'
-
-# input_file = os.path.join(source_dir, 'Rocket League 2018.07.15 - 20.25.33.135737.DVR.mp4')
-# output_file = os.path.join(dest_dir, 'test.mp4')
