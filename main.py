@@ -3,7 +3,7 @@ os.environ['KIVY_AUDIO'] = 'gstplayer'
 os.environ['KIVY_AUDIO'] = 'gstplayer'
 
 import kivy
-kivy.require('1.10.1')
+kivy.require('1.9.1')
 
 from kivy.config import Config
 Config.setall('graphics', {
